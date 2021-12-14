@@ -1,1 +1,173 @@
+<!DOCTYPE html>
+<!-- saved from url=(0067)https://eboyko.ru/blog/posts/mikrotik-hap-ac-security-configuration -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><title>MikroTik hAP&nbsp;AC: обеспечение безопасности</title>
+<h2>Преамбула</h2>
 
+<p>MikroTik в&nbsp;полушуточной манере сравнивают с&nbsp;легендарными Cisco&nbsp;— за&nbsp;классно реализованную командную строку. Оборудование компании уже используют в&nbsp;корпоративных инфраструктурах и&nbsp;дата-центрах по&nbsp;всему миру.</p>
+
+<p>Внимание к&nbsp;RouterOS начали проявлять и&nbsp;исследователи систем безопасности: специалисты постоянно ищут (и&nbsp;находят) уязвимости. В&nbsp;марте 2017&nbsp;года в&nbsp;публикациях Wikileaks всплыл описанный ЦРУ эксплойт<sup id="fnref1"><a href="https://eboyko.ru/blog/posts/mikrotik-hap-ac-security-configuration#fn1">1</a></sup> для встроенного HTTPD-сервера.</p>
+
+<p>Возможность осуществления множества атак, использующих подобные уязвимости, связана с&nbsp;неправильной (или недостаточной) настройкой оборудования. Компания регулярно обновляет специальный раздел документации<sup id="fnref2"><a href="https://eboyko.ru/blog/posts/mikrotik-hap-ac-security-configuration#fn2">2</a></sup>, посвященный безопасности. Многое из&nbsp;описанного ниже&nbsp;— точная копия рекомендаций MikroTik. Если коротко:&nbsp;приемлемая безопасность достигается отключением всех неиспользуемых функций и&nbsp;ограничением доступа ко&nbsp;всем используемым.</p>
+
+<p>Предполагается, что вы&nbsp;выполнили все инструкции из&nbsp;первой части<sup id="fnref3"><a href="https://eboyko.ru/blog/posts/mikrotik-hap-ac-security-configuration#fn3">3</a></sup>, и&nbsp;ваш роутер доступен в&nbsp;локальной сети по&nbsp;IP-адресу <code>192.168.0.254</code>.</p>
+
+<h2>Настройка SSH-аутентификации</h2>
+
+<p>Загрузите SSH-ключ на&nbsp;роутер, используя встроенный в&nbsp;Winbox файловый менеджер. (При необходимости сгенерируйте новую пару<sup id="fnref4"><a href="https://eboyko.ru/blog/posts/mikrotik-hap-ac-security-configuration#fn4">4</a></sup>.) Из&nbsp;главного меню перейдите в&nbsp;раздел <em>Files</em>, нажмите кнопку <em>Upload</em>, выберите файл публичной части ключа на&nbsp;локальном компьютере. По&nbsp;окончании загрузки он&nbsp;появится в&nbsp;корне файловой системы роутера.</p>
+
+<p><img src="https://eboyko.ru/MikroTik hAP AC_ обеспечение безопасности_files/original.png"></p>
+
+<p>Перейдите в&nbsp;раздел <em>System</em>&nbsp;— <em>Users</em>, во&nbsp;вкладке <em>SSH Keys</em> нажмите кнопку <em>Import SSH Key</em>. Укажите имя пользователя—владельца ключа, в&nbsp;поле <em>Key File</em> выберите только что загруженный файл. (После импорта файл будет автоматически удален с&nbsp;диска.)</p>
+
+<p><img src="https://eboyko.ru/MikroTik hAP AC_ обеспечение безопасности_files/original(1).png"></p>
+
+<p>Теперь вы&nbsp;можете подключиться к&nbsp;роутеру через SSH:</p>
+
+<pre><code class="bash hljs">ssh username@192.168.254
+</code></pre>
+
+<h2>Планомерный отказ от&nbsp;Winbox</h2>
+
+<p>Все это время вы&nbsp;пользовались замечательной программой Winbox. Однако, всему хорошему когда-нибудь приходит конец.&nbsp;Если&nbsp;собираетесь использовать устройства MikroTik на&nbsp;серьезном уровне, стоит отказаться от Winbox уже сейчас, отдав предпочтение SSH.</p>
+
+<p>Дальнейшие инструкции по-прежнему будут сопровождаться описанием (и&nbsp;скриншотами) настройки через Winbox, но&nbsp;все большее внимание будет уделяться командной строке.</p>
+
+<h2>Конфигурация системных служб</h2>
+
+<h3>Службы IP</h3>
+
+<p>В&nbsp;разделе <em>IP</em>&nbsp;— <em>Services</em> представлен список системных служб роутера. Каждая включенная&nbsp;— потенциальная угроза безопасности.</p>
+
+<ol>
+<li>Отключите <code>ftp</code> (в&nbsp;2018 году использовать этот протокол где бы&nbsp;то&nbsp;ни&nbsp;было&nbsp;— идея так себе).</li>
+<li>Отключите <code>api</code> и&nbsp;<code>api-ssl</code> (до&nbsp;тех пор, пока не&nbsp;узнаете зачем они нужны).</li>
+<li>Отключите <code>telnet</code>&nbsp;(есть <code>ssh</code>).</li>
+<li><code>www-ssl</code> отключен по&nbsp;умолчанию ввиду отсутствия сертификата.</li>
+<li>Отключите также <code>www</code>, эта служба отвечает за&nbsp;работу веб-интерфейса, дублирующего программу Winbox.</li>
+</ol>
+
+<pre><code class="routeros hljs bash">/ip service <span class="hljs-built_in">disable</span> telnet,ftp,www,api,api-ssl
+</code></pre>
+
+<p>Должно остаться две активных службы. Отредактируйте настройки каждой, установив значение параметра <em>Available From</em> равным адресному пространству локальной приватной сети (<code>192.168.0.0/24</code>).</p>
+
+<pre><code class="routeros hljs awk"><span class="hljs-regexp">/ip service set ssh address=192.168.0.0/</span><span class="hljs-number">24</span>
+<span class="hljs-regexp">/ip service set winbox address=192.168.0.0/</span><span class="hljs-number">24</span>
+</code></pre>
+
+<p><img src="https://eboyko.ru/MikroTik hAP AC_ обеспечение безопасности_files/original(2).png"></p>
+
+<p>Когда будете готовы работать с&nbsp;роутером при помощи только командной строки (возможно, уже сейчас)&nbsp;— отключите службу <code>winbox</code>.</p>
+
+<pre><code class="routeros hljs bash">/ip service <span class="hljs-built_in">disable</span> winbox
+</code></pre>
+
+<h3>Отключение служб MAC</h3>
+
+<p>В&nbsp;меню <em>Tools</em>&nbsp;— <em>MAC Server</em>, используя одноименные кнопки, ограничьте службы <em>MAC Telnet Server</em>, <em>MAC WinBox Server</em> и <em>MAC Ping Server</em>. Для первых двух установите значение параметра <em>Allowed Interface List</em> равным <code>none</code>, для третьей&nbsp;— деактивируйте <em>MAC Ping Server Enabled</em>.</p>
+
+<pre><code class="routeros hljs sql">/tool mac-server <span class="hljs-keyword">set</span> allowed-<span class="hljs-keyword">interface</span>-<span class="hljs-keyword">list</span>=<span class="hljs-keyword">none</span>
+/tool mac-<span class="hljs-keyword">server</span> mac-winbox <span class="hljs-keyword">set</span> allowed-<span class="hljs-keyword">interface</span>-<span class="hljs-keyword">list</span>=<span class="hljs-keyword">none</span>
+/tool mac-<span class="hljs-keyword">server</span> ping <span class="hljs-keyword">set</span> enabled=<span class="hljs-keyword">no</span>
+</code></pre>
+
+<p><img src="https://eboyko.ru/MikroTik hAP AC_ обеспечение безопасности_files/original(3).png"></p>
+
+<p>Помимо прочего, такая настройка сделает невозможным подключение к&nbsp;роутеру по&nbsp;его MAC-адресу, чем вы&nbsp;пользовались в&nbsp;предыдущей статье.</p>
+
+<h3>Отключение Neighbor Discovery</h3>
+
+<p>Раздел <em>IP</em>&nbsp;— <em>Neighbors</em>, кнопка <em>Discovery Settings</em>. Как и&nbsp;в&nbsp;предыдущем разделе, установите параметр <em>Interface</em> равным <code>none</code>.</p>
+
+<pre><code class="routeros hljs sql">/ip neighbor discovery-settings <span class="hljs-keyword">set</span> discover-<span class="hljs-keyword">interface</span>-<span class="hljs-keyword">list</span>=<span class="hljs-keyword">none</span> 
+</code></pre>
+
+<p><img src="https://eboyko.ru/MikroTik hAP AC_ обеспечение безопасности_files/original(4).png"></p>
+
+<h3>Отключения сервера полосы пропускания</h3>
+
+<p><em>Tools</em>&nbsp;— <em>BTest Server</em>, деактивировать параметр <em>Enabled</em>.</p>
+
+<pre><code class="routeros hljs pgsql">/tool bandwidth-<span class="hljs-keyword">server</span> <span class="hljs-keyword">set</span> enabled=<span class="hljs-keyword">no</span>
+</code></pre>
+
+<p><img src="https://eboyko.ru/MikroTik hAP AC_ обеспечение безопасности_files/original(5).png"></p>
+
+<h2>Файрвол</h2>
+
+<p>В RouterOS реализован серьезный файрвол, настройка которого в&nbsp;чем-то похожа на&nbsp;настройку <em>Netfilter</em>, а&nbsp;в&nbsp;чем-то даже удобнее.</p>
+
+<p>Конфигурировать правила вы&nbsp;будете по&nbsp;принципу «запрещено все, что не&nbsp;разрешено». Сделать это вам придется с&nbsp;помощью командной строки. Можете воспользоваться SSH-подключением или вызвать окно встроенного терминала Winbox (<em>New Terminal</em>).</p>
+
+<p><img src="https://eboyko.ru/MikroTik hAP AC_ обеспечение безопасности_files/original(6).png"></p>
+
+<h3>ICMP</h3>
+
+<p>Если есть необходимость в ICMP, добавьте правило, разрешающее прием соединений на&nbsp;внешнем интерфейсе <code>wan1</code>:</p>
+
+<pre><code class="routeros hljs pgsql">/ip firewall <span class="hljs-keyword">filter</span> <span class="hljs-keyword">add</span> action=accept chain=<span class="hljs-keyword">input</span> <span class="hljs-keyword">in</span>-interface=wan1 <span class="hljs-keyword">limit</span>=<span class="hljs-number">50</span>/<span class="hljs-number">5</span>s,<span class="hljs-number">2</span>:packet protocol=icmp
+</code></pre>
+
+<p>Знатоки советуют использовать ограничение (параметр <em>limit</em>) количества пропускаемых пакетов в&nbsp;единицу времени.</p>
+
+<h3>Фильтрация входящих соединений</h3>
+
+<p>Разрешите прием установленных или связанных соединений:</p>
+
+<pre><code class="routeros hljs pgsql">/ip firewall <span class="hljs-keyword">filter</span> <span class="hljs-keyword">add</span> action=accept chain=<span class="hljs-keyword">input</span> <span class="hljs-keyword">connection</span>-state=established,related
+</code></pre>
+
+<p>Запретите обработку некорректных соединений:</p>
+
+<pre><code class="routeros hljs pgsql">/ip firewall <span class="hljs-keyword">filter</span> <span class="hljs-keyword">add</span> action=<span class="hljs-keyword">drop</span> chain=<span class="hljs-keyword">input</span> <span class="hljs-keyword">connection</span>-state=invalid
+</code></pre>
+
+<h3>Фильтрация переадресованных соединений</h3>
+
+<p>Добавьте правила, аналогичные описанным в&nbsp;предыдущем пункте, для переадресованных (предназначенных устройствам внутри локальной сети) соединений:</p>
+
+<pre><code class="routeros hljs pgsql">/ip firewall <span class="hljs-keyword">filter</span> <span class="hljs-keyword">add</span> action=accept chain=forward <span class="hljs-keyword">connection</span>-state=established,related
+/ip firewall <span class="hljs-keyword">filter</span> <span class="hljs-keyword">add</span> action=<span class="hljs-keyword">drop</span> chain=forward <span class="hljs-keyword">connection</span>-state=invalid
+</code></pre>
+
+<h3>Разрешение переадресованного трафика из&nbsp;локальной сети</h3>
+
+<p>Чтобы пользователи локальной приватной сети (<code>bridge-private</code>) могли пользоваться интернетом, разрешите пропускание их&nbsp;соединений на&nbsp;интерфейс провайдера (<code>wan1</code>):</p>
+
+<pre><code class="routeros hljs pgsql">/ip firewall <span class="hljs-keyword">filter</span> <span class="hljs-keyword">add</span> action=accept chain=forward <span class="hljs-keyword">in</span>-interface=bridge-private <span class="hljs-keyword">out</span>-interface=wan1
+</code></pre>
+
+<h3>Запрет всего неразрешенного</h3>
+
+<p>Теперь запретите любые прочие входящие соединения извне:</p>
+
+<pre><code class="routeros hljs vim">/ip firewall <span class="hljs-built_in">filter</span> <span class="hljs-built_in">add</span> action=<span class="hljs-keyword">drop</span> chain=<span class="hljs-built_in">input</span> in-interface=wan1
+</code></pre>
+
+<h2>Итог</h2>
+
+<p>В&nbsp;текущем состоянии ваш роутер уже на&nbsp;голову выше остальных устройств, в&nbsp;том числе в&nbsp;вопросе безопасности. Еще немного уверенности добавляют регулярные обновления RouterOS. Вспомните, как часто выпускают обновления прошивок другие производители домашних роутеров.</p>
+
+<div class="footnotes">
+<hr>
+<ol>
+
+<li id="fn1">
+<p><a href="https://forum.mikrotik.com/viewtopic.php?t=119255">Тема на&nbsp;форуме MikroTik, посвященная эксплойту ЦРУ</a>&nbsp;<a href="https://eboyko.ru/blog/posts/mikrotik-hap-ac-security-configuration#fnref1">↩</a></p>
+</li>
+
+<li id="fn2">
+<p><a href="https://wiki.mikrotik.com/wiki/Manual:Securing_Your_Router">Securing Your Router,&nbsp;официальная документация MikroTik</a>&nbsp;<a href="https://eboyko.ru/blog/posts/mikrotik-hap-ac-security-configuration#fnref2">↩</a></p>
+</li>
+
+<li id="fn3">
+<p><a href="https://eboyko.ru/blog/posts/mikrotik-hap-ac-initial-setup">MikroTik hAP AC: сброс и базовая настройка</a>&nbsp;<a href="https://eboyko.ru/blog/posts/mikrotik-hap-ac-security-configuration#fnref3">↩</a></p>
+</li>
+
+<li id="fn4">
+<p><a href="https://help.github.com/articles/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent/">Небольшая инструкция по&nbsp;генерации SSH-ключей</a>&nbsp;<a href="https://eboyko.ru/blog/posts/mikrotik-hap-ac-security-configuration#fnref4">↩</a></p>
+</li>
+
+</ol>
+</div>
+</div></div></div></body></html>
